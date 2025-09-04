@@ -50,21 +50,25 @@ def dump_node(node: Node, level: int = 0):
 class bitswriter(object):
     def __init__(self):
         self._ba  = bytearray()
-        self._byte    = 0
-        self._bytelen = 0
+        self._bits    = 0
+        self._bitslen = 0 # Capped at 8 or a byte
 
     def tobytes(self) -> bytes:
+        if self._bitslen > 0:
+            self._ba.append(self._bits)
+            self._bits = 0
+            self._bitslen = 0
         return bytes(self._ba)
 
     def pushbit(self, value: bool):
         if value:
-            self._byte |= (1 << (7 - self._bytelen))
-        self._bytelen += 1
+            self._bits |= (1 << (7 - self._bitslen))
+        self._bitslen += 1
 
-        if self._bytelen == 8:
-            self._ba.append(self._byte)
-            self._byte = 0
-            self._bytelen = 0
+        if self._bitslen == 8:
+            self._ba.append(self._bits)
+            self._bits = 0
+            self._bitslen = 0
 
     def pushbytes(self, value: bytes):
         for byte in value:
