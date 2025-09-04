@@ -1,4 +1,6 @@
 from __future__ import annotations
+import base64
+import json
 
 def shiftargs(args: list[str], error: str) -> tuple[str, list[str]]:
     if len(args) < 1:
@@ -30,7 +32,6 @@ class Node(object):
         else:
             return f"Node({display_token(self.token)}, Freq={self.freq})"
 
-
     def __repr__(self):
         return str(self)
 
@@ -46,27 +47,51 @@ def dump_node(node: Node, level: int = 0):
         dump_node(node.rhs, level + 1)
     print(">" * (level + 1), node)
 
-def get_encoding_of_token(token: str, root: Node) -> str:
-    def get_encoding_of_token_inner(node: Node, path: str) -> tuple[str, bool]:
-        # Base case if it's leaf node
+class bitswriter(object):
+    def __init__(self):
+        self._ba  = bytearray()
+        self._byte    = 0
+        self._bytelen = 0
+
+    def tobytes(self) -> bytes:
+        return bytes(self._ba)
+
+    def pushbit(self, value: bool):
+        if value:
+            self._byte |= (1 << (7 - self._bytelen))
+        self._bytelen += 1
+
+        if self._bytelen == 8:
+            self._ba.append(self._byte)
+            self._byte = 0
+            self._bytelen = 0
+
+    def pushbytes(self, value: bytes):
+        for byte in value:
+            for i in range(8):
+                bit = (byte >> (7 - i)) & 1
+                self.pushbit(bit == 1)
+
+def get_encoding_of_token(token: str, root: Node) -> bytes:
+    result = bitswriter()
+    def get_encoding_of_token_inner(node: Node) -> bool:
         if node.lhs is None and node.rhs is None:
-            return (path, True) if node.token == token else ("", False)
-        # Left
+            return True if node.token == token else False
         if node.lhs is not None:
-            left_path, found = get_encoding_of_token_inner(node.lhs, path + "0")
+            found = get_encoding_of_token_inner(node.lhs)
             if found:
-                return left_path, True
-        # Right
+                result.pushbit(False)
+                return True
         if node.rhs is not None:
-            right_path, found = get_encoding_of_token_inner(node.rhs, path + "1")
+            found = get_encoding_of_token_inner(node.rhs)
             if found:
-                return right_path, True
-        return "", False
+                result.pushbit(True)
+                return True
+        return False
 
-    result, found = get_encoding_of_token_inner(root, "")
+    found = get_encoding_of_token_inner(root)
     assert found, f"{display_token(token)} is invalid"
-    return result
-
+    return result.tobytes()
 
 if __name__ == "__main__":
     import sys
@@ -98,9 +123,15 @@ if __name__ == "__main__":
     table = {}
     for token, _ in tokenfreqs:
         table[token] = get_encoding_of_token(token, root)
-    result = ""
+    result = bitswriter()
     for ch in data:
-        result += table[ch]
-    print(result)
+        result.pushbytes(table[ch])
+    with open("result.data", "wb") as file:
+        file.write(result.tobytes())
+    with open("result.table", "w") as file:
+        new_table = {}
+        for key, value in table.items():
+            new_table[key] = base64.b64encode(value).decode()
+        file.write(json.dumps(new_table, indent=4))
         
 
